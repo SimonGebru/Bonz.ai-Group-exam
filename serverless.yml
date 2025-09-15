@@ -1,0 +1,31 @@
+service: bonzai-api
+frameworkVersion: '4'
+
+plugins:
+  - serverless-offline
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: eu-north-1
+  stage: dev
+  httpApi:
+    cors:
+      allowedOrigins: ['*']
+      allowedHeaders: ['Content-Type','Authorization']
+      allowedMethods: ['GET','POST','PATCH','DELETE','OPTIONS']
+
+functions:
+  listRooms:
+    handler: src/handlers/rooms/listRooms.handler
+    events:
+      - httpApi:
+          method: GET
+          path: /rooms
+
+  listBookings:
+    handler: src/handlers/bookings/listBookings.handler
+    events:
+      - httpApi:
+          method: GET
+          path: /bookings
