@@ -47,6 +47,13 @@ functions:
           method: GET
           path: /bookings
 
+  createBooking:
+    handler: src/handlers/bookings/createBooking.handler
+    events:
+      - httpApi:
+          method: POST
+          path: /bookings
+
 resources:
   Resources:
     BonzaiTable:
