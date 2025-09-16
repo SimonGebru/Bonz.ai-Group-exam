@@ -1,16 +1,15 @@
+const { pricePerType, capacityPerType } = require("../../lib/pricing");
+
 exports.handler = async () => {
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ok: true,
-        data: {
-          rooms: [
-            { type: "single", pricePerNight: 500, capacity: 1 },
-            { type: "double", pricePerNight: 1000, capacity: 2 },
-            { type: "suite",  pricePerNight: 1500, capacity: 3 },
-          ],
-        },
-      }),
-    };
+  const rooms = Object.keys(pricePerType).map((type) => ({
+    type,
+    pricePerNight: pricePerType[type],
+    capacity: capacityPerType[type],
+  }));
+
+  return {
+    statusCode: 200,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ok: true, data: { rooms } }),
   };
+};
