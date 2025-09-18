@@ -12,9 +12,14 @@ const ddb = new DynamoDBClient({ region: REGION });
 exports.handler = async (event) => {
   try {
     const body = safeJson(event.body);
-    const { guests, nights, rooms } = body || {};
+    const { guests, nights, rooms, name, email } = body || {};
 
-    
+    if (!name || typeof name !== "string") {
+      return json(400, { ok: false, error: { message: "namn är obligatoriskt" } });
+    }
+    if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return json(400, { ok: false, error: { message: "email är obligatoriskt" } });
+    }
     if (!Number.isInteger(guests) || guests <= 0) {
       return json(400, { ok: false, error: { message: "antal gäster måste vara ett positivt heltal" } });
     }
@@ -51,6 +56,7 @@ exports.handler = async (event) => {
     
     const bookingId = newId();
     const now = new Date().toISOString();
+    const checkout = new Date(Date.now() + nights * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
     const item = {
       PK: `BOOKING#${bookingId}`,
@@ -59,11 +65,15 @@ exports.handler = async (event) => {
       GSI1SK: `CREATED_AT#${now}`,
 
       bookingId,
+      name,
+      email,
       guests,
       nights,
       rooms,       
       totalPrice,
       status: "CONFIRMED",
+      checkIn: now,
+      checkOut: checkout,
       createdAt: now,
     };
 
