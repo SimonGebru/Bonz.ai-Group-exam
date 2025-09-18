@@ -56,7 +56,6 @@ exports.handler = async (event) => {
     
     const bookingId = newId();
     const now = new Date().toISOString();
-    const checkout = new Date(Date.now() + nights * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
     const item = {
       PK: `BOOKING#${bookingId}`,
@@ -72,8 +71,6 @@ exports.handler = async (event) => {
       rooms,       
       totalPrice,
       status: "CONFIRMED",
-      checkIn: now,
-      checkOut: checkout,
       createdAt: now,
     };
 

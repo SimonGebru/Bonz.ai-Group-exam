@@ -33,7 +33,17 @@ exports.handler = async (event) => {
     };
 
     const res = await ddb.send(new QueryCommand(params));
-    const items = (res.Items || []).map(unmarshall);
+    const raw = (res.Items || []).map(unmarshall);
+
+    
+    const items = raw.map(b => ({
+      bookingId: b.bookingId,                                    
+      checkIn: b.checkIn || null,                                
+      checkOut: b.checkOut || null,                              
+      guests: b.guests,                                         
+      roomsCount: (b.rooms || []).reduce((sum, r) => sum + (r.qty || 0), 0), 
+      name: b.name || b.guestName || ""                          
+    }));
 
     let nextToken;
     if (res.LastEvaluatedKey) {
@@ -51,6 +61,6 @@ function json(statusCode, body) {
   return {
     statusCode,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body, null, 2), 
   };
 }
