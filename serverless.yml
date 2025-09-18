@@ -54,6 +54,13 @@ functions:
           method: POST
           path: /bookings
 
+  deleteBooking:
+    handler: src/handlers/bookings/deleteBooking.handler
+    events:
+      - httpApi:
+          method: DELETE
+          path: /bookings/{bookingId}
+
 resources:
   Resources:
     BonzaiTable:
