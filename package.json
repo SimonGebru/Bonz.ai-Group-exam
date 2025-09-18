@@ -3,16 +3,17 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-  "dev": "serverless offline",
-  "deploy": "serverless deploy",
-  "remove": "serverless remove"
-},
+    "dev": "serverless offline",
+    "deploy": "serverless deploy",
+    "remove": "serverless remove"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.888.0",
+    "@aws-sdk/lib-dynamodb": "^3.891.0",
     "@aws-sdk/util-dynamodb": "^3.888.0"
   },
   "devDependencies": {

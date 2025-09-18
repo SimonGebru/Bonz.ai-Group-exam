@@ -18,7 +18,7 @@ exports.handler = async (event) => {
     if (!bookingId) {
       return {
         statusCode: 400,
-        body: JSON.stringify({ error: "Saknar boknings ID" }),
+        body: JSON.stringify({ error: "Saknar bokningsID" }),
       };
     }
 
@@ -51,11 +51,14 @@ exports.handler = async (event) => {
     const rooms = updates.rooms || currentBooking.Item.rooms;
     const guests = updates.guests || currentBooking.Item.guests;
     const nights = updates.nights || currentBooking.Item.nights;
+    const checkIn = updates.checkIn || currentBooking.Item.checkIn;
+    const checkOut = updates.checkOut || currentBooking.Item.checkOut;
 
     const totalCapacity = rooms.reduce(
       (sum, r) => sum + capacityPerType[r.type] * r.qty,
       0
     );
+
     if (guests > totalCapacity) {
       return {
         statusCode: 400,
@@ -69,6 +72,17 @@ exports.handler = async (event) => {
         0
       );
       updates.totalPrice = pricePerNight * nights;
+    }
+
+    if (updates.checkIn || updates.checkOut) {
+      if (new Date(checkIn) >= new Date(checkOut)) {
+        return {
+          statusCode: 400,
+          body: JSON.stringify({
+            error: "Incheckning måste vara före utcheckning",
+          }),
+        };
+      }
     }
 
     updates.updatedAt = new Date().toISOString();
@@ -99,13 +113,16 @@ exports.handler = async (event) => {
 
     return {
       statusCode: 200,
+      headers: {
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ booking: result.Attributes }),
     };
   } catch (error) {
-    console.error("Error updating booking:", error);
+    console.error("Error:", error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Kunde inte uppdatera bokning" }),
+      body: JSON.stringify({ error: "Kunde inte uppdatera bokningen" }),
     };
   }
 };
