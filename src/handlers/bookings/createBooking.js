@@ -14,7 +14,7 @@ exports.handler = async (event) => {
     const body = safeJson(event.body);
     const { guests, nights, rooms, name, email } = body || {};
 
-    if (!name || typeof name !== "string") {
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
       return json(400, { ok: false, error: { message: "namn är obligatoriskt" } });
     }
     if (!email || typeof email !== "string" || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -30,21 +30,19 @@ exports.handler = async (event) => {
       return json(400, { ok: false, error: { message: "rum måste vara en array som inte är tom" } });
     }
 
-    
     for (const r of rooms) {
       if (!r || typeof r !== "object") {
         return json(400, { ok: false, error: { message: "varje rum måste vara ett objekt" } });
       }
       const { type, qty } = r;
       if (!pricePerType[type] || !capacityPerType[type]) {
-        return json(400, { ok: false, error: { message: `ogiltig rumstyp: ${type}` } });
+        return json(400, { ok: false, error: { message: `ogiltig rumstyp: ${type}` } }); 
       }
       if (!Number.isInteger(qty) || qty <= 0) {
         return json(400, { ok: false, error: { message: "antal rum måste vara ett positivt heltal" } });
       }
     }
 
-   
     const totalCapacity = rooms.reduce((sum, r) => sum + capacityPerType[r.type] * r.qty, 0);
     if (guests > totalCapacity) {
       return json(400, { ok: false, error: { message: "antal gäster överstiger rummens totala kapacitet" } });
@@ -53,31 +51,34 @@ exports.handler = async (event) => {
     const pricePerNight = rooms.reduce((sum, r) => sum + pricePerType[r.type] * r.qty, 0);
     const totalPrice = pricePerNight * nights;
 
-    
     const bookingId = newId();
     const now = new Date().toISOString();
+    const checkin = new Date().toISOString().split("T")[0];
+    const checkout = new Date(Date.now() + nights * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
     const item = {
-      PK: `BOOKING#${bookingId}`,
-      SK: `BOOKING#${bookingId}`,
+      PK: `BOOKING#${bookingId}`,         
+      SK: `BOOKING#${bookingId}`,         
       GSI1PK: "BOOKING",
-      GSI1SK: `CREATED_AT#${now}`,
+      GSI1SK: `CREATED_AT#${now}`,        
 
       bookingId,
       name,
       email,
       guests,
       nights,
-      rooms,       
+      rooms,
       totalPrice,
       status: "CONFIRMED",
+      checkIn: checkin,
+      checkOut: checkout,
       createdAt: now,
     };
 
     await ddb.send(new PutItemCommand({
       TableName: TABLE_NAME,
       Item: marshall(item, { removeUndefinedValues: true }),
-      ConditionExpression: "attribute_not_exists(PK)", 
+      ConditionExpression: "attribute_not_exists(PK)",
     }));
 
     return json(201, { ok: true, data: item });
@@ -91,7 +92,7 @@ function json(statusCode, body) {
   return {
     statusCode,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body, null, 2), 
   };
 }
 
