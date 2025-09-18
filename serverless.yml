@@ -60,6 +60,13 @@ functions:
       - httpApi:
           method: DELETE
           path: /bookings/{bookingId}
+          
+  updateBooking:
+    handler: src/handlers/bookings/updateBooking.handler
+    events:
+      - httpApi:
+          method: PATCH
+          path: /bookings/{id}
 
 resources:
   Resources:
