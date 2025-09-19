@@ -1,24 +1,27 @@
-const { DynamoDBClient, QueryCommand } = require("@aws-sdk/client-dynamodb");
+const { QueryCommand } = require("@aws-sdk/client-dynamodb");
 const { unmarshall } = require("@aws-sdk/util-dynamodb");
+const { ddb } = require("../../lib/db");
+const { BadRequestError, DbError, toHttpStatus } = require("../../lib/errors"); 
 
-const REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "eu-north-1";
 const TABLE_NAME = process.env.TABLE_NAME || "Bonzai";
-const ddb = new DynamoDBClient({ region: REGION });
 
 exports.handler = async (event) => {
   try {
     const qs = event?.queryStringParameters || {};
     const limit = qs.limit ? Number(qs.limit) : 20;
+
     if (Number.isNaN(limit) || limit <= 0 || limit > 100) {
-      return json(400, { ok: false, error: { message: "limit must be 1..100" } });
+      throw new BadRequestError("limit måste vara mellan 1 och 100"); 
     }
 
     let ExclusiveStartKey;
     if (qs.nextToken) {
       try {
-        ExclusiveStartKey = JSON.parse(Buffer.from(qs.nextToken, "base64").toString("utf-8"));
+        ExclusiveStartKey = JSON.parse(
+          Buffer.from(qs.nextToken, "base64").toString("utf-8")
+        );
       } catch {
-        return json(400, { ok: false, error: { message: "invalid nextToken" } });
+        throw new BadRequestError("invalid nextToken"); 
       }
     }
 
@@ -27,22 +30,29 @@ exports.handler = async (event) => {
       IndexName: "GSI1",
       KeyConditionExpression: "GSI1PK = :pk",
       ExpressionAttributeValues: { ":pk": { S: "BOOKING" } },
-      ScanIndexForward: false,
+      ScanIndexForward: false, 
       Limit: limit,
       ExclusiveStartKey,
     };
 
-    const res = await ddb.send(new QueryCommand(params));
+    let res;
+    try {
+      res = await ddb().send(new QueryCommand(params));
+    } catch (e) {
+      console.error("Query error:", e);
+      throw new DbError("kunde inte hämta bokningar"); 
+    }
+
     const raw = (res.Items || []).map(unmarshall);
 
     
-    const items = raw.map(b => ({
-      bookingId: b.bookingId,                                    
-      checkIn: b.checkIn || null,                                
-      checkOut: b.checkOut || null,                              
-      guests: b.guests,                                         
-      roomsCount: (b.rooms || []).reduce((sum, r) => sum + (r.qty || 0), 0), 
-      name: b.name || b.guestName || ""                          
+    const items = raw.map((b) => ({
+      bookingId: b.bookingId,
+      checkIn: b.checkIn || null,
+      checkOut: b.checkOut || null,
+      guests: b.guests,
+      roomsCount: (b.rooms || []).reduce((sum, r) => sum + (r.qty || 0), 0),
+      name: b.name || b.guestName || "",
     }));
 
     let nextToken;
@@ -53,7 +63,8 @@ exports.handler = async (event) => {
     return json(200, { ok: true, data: { items, nextToken } });
   } catch (err) {
     console.error("listBookings error:", err);
-    return json(500, { ok: false, error: { message: "Internal Server Error" } });
+    const status = toHttpStatus(err); 
+    return json(status, { ok: false, error: { message: err.message } }); 
   }
 };
 
@@ -61,6 +72,6 @@ function json(statusCode, body) {
   return {
     statusCode,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body, null, 2), 
+    body: JSON.stringify(body, null, 2),
   };
 }

@@ -1,16 +1,16 @@
-const { DynamoDBClient, DeleteItemCommand } = require("@aws-sdk/client-dynamodb");
+const { DeleteItemCommand } = require("@aws-sdk/client-dynamodb");
 const { unmarshall } = require("@aws-sdk/util-dynamodb");
+const { ddb } = require("../../lib/db");
+const { BadRequestError, NotFoundError, DbError, toHttpStatus } = require("../../lib/errors"); 
 
-const REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "eu-north-1";
 const TABLE_NAME = process.env.TABLE_NAME || "Bonzai";
-const ddb = new DynamoDBClient({ region: REGION });
 
 exports.handler = async (event) => {
   try {
     const bookingId = event.pathParameters?.bookingId;
 
     if (!bookingId || typeof bookingId !== "string") {
-      return json(400, { ok: false, error: { message: "bookingId måste anges i URL:en" } });
+      throw new BadRequestError("bookingId måste anges i URL:en"); 
     }
 
     const Key = {
@@ -25,16 +25,23 @@ exports.handler = async (event) => {
       ConditionExpression: "attribute_exists(PK)",
     });
 
-    const result = await ddb.send(command);
+    let result;
+    try {
+      result = await ddb().send(command);
+    } catch (e) {
+      console.error("DeleteItem error:", e);
+      throw new DbError("kunde inte ta bort bokningen"); 
+    }
 
     if (!result.Attributes) {
-      return json(404, { ok: false, error: { message: "Booking not found" } });
+      throw new NotFoundError("Booking not found"); 
     }
 
     return json(200, { ok: true, data: unmarshall(result.Attributes) });
   } catch (err) {
     console.error("deleteBooking error:", err);
-    return json(500, { ok: false, error: { message: "Internal Server Error" } });
+    const status = toHttpStatus(err); 
+    return json(status, { ok: false, error: { message: err.message } }); 
   }
 };
 
@@ -42,6 +49,6 @@ function json(statusCode, body) {
   return {
     statusCode,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(body, null, 2),
   };
 }

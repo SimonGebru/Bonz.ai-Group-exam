@@ -1,51 +1,46 @@
-const { DynamoDBClient } = require("@aws-sdk/client-dynamodb");
 const {
   DynamoDBDocumentClient,
   UpdateCommand,
   GetCommand,
 } = require("@aws-sdk/lib-dynamodb");
 const { pricePerType, capacityPerType } = require("../../lib/pricing");
+const { ddb } = require("../../lib/db");
+const { BadRequestError, NotFoundError, DbError, toHttpStatus } = require("../../lib/errors"); 
 
-const REGION =
-  process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "eu-north-1";
 const TABLE_NAME = process.env.TABLE_NAME || "Bonzai";
-const client = new DynamoDBClient({ region: REGION });
-const ddbDocClient = DynamoDBDocumentClient.from(client);
+const ddbDocClient = DynamoDBDocumentClient.from(ddb());
 
 exports.handler = async (event) => {
   try {
     const bookingId = event.pathParameters?.id;
     if (!bookingId) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "Saknar bokningsID" }),
-      };
+      throw new BadRequestError("Saknar bokningsID"); 
     }
 
     const updates = JSON.parse(event.body || "{}");
 
     if (Object.keys(updates).length === 0) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "Ingen data att uppdatera" }),
-      };
+      throw new BadRequestError("Ingen data att uppdatera"); 
     }
 
-    const currentBooking = await ddbDocClient.send(
-      new GetCommand({
-        TableName: TABLE_NAME,
-        Key: {
-          PK: `BOOKING#${bookingId}`,
-          SK: `BOOKING#${bookingId}`,
-        },
-      })
-    );
+    let currentBooking;
+    try {
+      currentBooking = await ddbDocClient.send(
+        new GetCommand({
+          TableName: TABLE_NAME,
+          Key: {
+            PK: `BOOKING#${bookingId}`,
+            SK: `BOOKING#${bookingId}`,
+          },
+        })
+      );
+    } catch (e) {
+      console.error("GetCommand error:", e);
+      throw new DbError("kunde inte läsa bokningen"); 
+    }
 
     if (!currentBooking.Item) {
-      return {
-        statusCode: 404,
-        body: JSON.stringify({ error: "Ingen bokning hittad" }),
-      };
+      throw new NotFoundError("Ingen bokning hittad"); 
     }
 
     const rooms = updates.rooms || currentBooking.Item.rooms;
@@ -60,10 +55,7 @@ exports.handler = async (event) => {
     );
 
     if (guests > totalCapacity) {
-      return {
-        statusCode: 400,
-        body: JSON.stringify({ error: "För många gäster för angivet rum" }),
-      };
+      throw new BadRequestError("För många gäster för angivet rum"); 
     }
 
     if (updates.rooms || updates.nights) {
@@ -76,53 +68,54 @@ exports.handler = async (event) => {
 
     if (updates.checkIn || updates.checkOut) {
       if (new Date(checkIn) >= new Date(checkOut)) {
-        return {
-          statusCode: 400,
-          body: JSON.stringify({
-            error: "Incheckning måste vara före utcheckning",
-          }),
-        };
+        throw new BadRequestError("Incheckning måste vara före utcheckning"); 
       }
     }
 
     updates.updatedAt = new Date().toISOString();
 
-    const result = await ddbDocClient.send(
-      new UpdateCommand({
-        TableName: TABLE_NAME,
-        Key: {
-          PK: `BOOKING#${bookingId}`,
-          SK: `BOOKING#${bookingId}`,
-        },
+    let result;
+    try {
+      result = await ddbDocClient.send(
+        new UpdateCommand({
+          TableName: TABLE_NAME,
+          Key: {
+            PK: `BOOKING#${bookingId}`,
+            SK: `BOOKING#${bookingId}`,
+          },
 
-        UpdateExpression: `SET ${Object.keys(updates)
-          .map((key) => `#${key} = :${key}`)
-          .join(", ")}`,
+          UpdateExpression: `SET ${Object.keys(updates)
+            .map((key) => `#${key} = :${key}`)
+            .join(", ")}`,
 
-        ExpressionAttributeNames: Object.fromEntries(
-          Object.keys(updates).map((key) => [`#${key}`, key])
-        ),
+          ExpressionAttributeNames: Object.fromEntries(
+            Object.keys(updates).map((key) => [`#${key}`, key])
+          ),
 
-        ExpressionAttributeValues: Object.fromEntries(
-          Object.entries(updates).map(([key, value]) => [`:${key}`, value])
-        ),
+          ExpressionAttributeValues: Object.fromEntries(
+            Object.entries(updates).map(([key, value]) => [`:${key}`, value])
+          ),
 
-        ReturnValues: "ALL_NEW",
-      })
-    );
+          ReturnValues: "ALL_NEW",
+        })
+      );
+    } catch (e) {
+      console.error("UpdateCommand error:", e);
+      throw new DbError("kunde inte uppdatera bokningen"); 
+    }
 
     return {
       statusCode: 200,
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ booking: result.Attributes }),
     };
-  } catch (error) {
-    console.error("Error:", error);
+  } catch (err) {
+    console.error("updateBooking error:", err);
+    const status = toHttpStatus(err); 
     return {
-      statusCode: 500,
-      body: JSON.stringify({ error: "Kunde inte uppdatera bokningen" }),
+      statusCode: status,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: err.message || "Kunde inte uppdatera bokningen" }),
     };
   }
 };
